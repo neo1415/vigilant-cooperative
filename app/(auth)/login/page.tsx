@@ -17,14 +17,17 @@
  */
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { setToken } from '@/lib/auth';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl') || '/dashboard';
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [totpCode, setTotpCode] = useState('');
@@ -65,18 +68,13 @@ export default function LoginPage() {
         return;
       }
 
-      // Store access token
-      if (rememberMe) {
-        localStorage.setItem('accessToken', data.data.accessToken);
-      } else {
-        sessionStorage.setItem('accessToken', data.data.accessToken);
+      // Store JWT token using auth utility
+      if (data.data.accessToken) {
+        setToken(data.data.accessToken);
       }
 
-      // Store user info
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-
-      // Redirect to dashboard
-      router.push('/dashboard');
+      // Redirect to returnUrl or dashboard
+      router.push(returnUrl);
     } catch (err) {
       setError('An error occurred. Please try again.');
       setLoading(false);

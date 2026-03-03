@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ThemeToggle } from './theme-toggle';
+import { isAuthenticated } from '@/lib/auth';
 
 export function Navbar() {
+  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -16,6 +19,15 @@ export function Navbar() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const handleMemberPortalClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isAuthenticated()) {
+      router.push('/dashboard');
+    } else {
+      router.push('/login');
+    }
+  };
 
   return (
     <nav
@@ -82,12 +94,12 @@ export function Navbar() {
             >
               Sign In
             </Link>
-            <Link
-              href="/dashboard"
+            <button
+              onClick={handleMemberPortalClick}
               className="px-6 py-2 rounded-lg gradient-bg text-white font-medium hover:opacity-90 transition-opacity"
             >
               Member Portal
-            </Link>
+            </button>
           </div>
 
           {/* Mobile menu button */}
@@ -172,13 +184,15 @@ export function Navbar() {
               >
                 Sign In
               </Link>
-              <Link
-                href="/dashboard"
-                className="block px-4 py-2 text-center rounded-lg gradient-bg text-white font-medium hover:opacity-90 transition-opacity"
-                onClick={() => setIsMobileMenuOpen(false)}
+              <button
+                onClick={(e) => {
+                  setIsMobileMenuOpen(false);
+                  handleMemberPortalClick(e);
+                }}
+                className="block w-full px-4 py-2 text-center rounded-lg gradient-bg text-white font-medium hover:opacity-90 transition-opacity"
               >
                 Member Portal
-              </Link>
+              </button>
             </div>
           </div>
         </div>

@@ -42,14 +42,14 @@ declare module 'fastify' {
 /**
  * Register authentication routes
  */
-export async function authRoutes(fastify: FastifyInstance) {
+export async function authRoutes(fastify: FastifyInstance, options: any) {
   const authService = new AuthService(fastify.redis);
 
   /**
-   * POST /auth/register
+   * POST /api/v1/auth/register
    * Register a new member
    */
-  fastify.post('/auth/register', async (request, reply) => {
+  fastify.post('/api/v1/auth/register', async (request, reply) => {
     // Validate input
     const validation = validateSchema(registrationSchema, request.body);
     
@@ -104,10 +104,10 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * POST /auth/login
+   * POST /api/v1/auth/login
    * Login with credentials
    */
-  fastify.post('/auth/login', async (request, reply) => {
+  fastify.post('/api/v1/auth/login', async (request, reply) => {
     // Validate input
     const validation = validateSchema(loginSchema, request.body);
     
@@ -184,10 +184,10 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * POST /auth/logout
+   * POST /api/v1/auth/logout
    * Logout (blacklist JWT and delete refresh token)
    */
-  fastify.post('/auth/logout', {
+  fastify.post('/api/v1/auth/logout', {
     onRequest: [fastify.authenticate],
   }, async (request, reply) => {
     const user = (request as any).user as AuthenticatedUser;
@@ -215,10 +215,10 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * POST /auth/forgot-password
+   * POST /api/v1/auth/forgot-password
    * Request password reset OTP
    */
-  fastify.post('/auth/forgot-password', async (request, reply) => {
+  fastify.post('/api/v1/auth/forgot-password', async (request, reply) => {
     // Validate input
     const validation = validateSchema(forgotPasswordSchema, request.body);
     
@@ -243,10 +243,10 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * POST /auth/reset-password
+   * POST /api/v1/auth/reset-password
    * Reset password with OTP
    */
-  fastify.post('/auth/reset-password', async (request, reply) => {
+  fastify.post('/api/v1/auth/reset-password', async (request, reply) => {
     // Validate input
     const validation = validateSchema(resetPasswordSchema, request.body);
     

@@ -125,22 +125,25 @@ export class AuthService {
     
     // Generate member ID
     const year = new Date().getFullYear();
-    // Get next sequence number from database
+    // Get next sequence number from database - get the highest sequence for current year
     const lastMembers = await db
       .select({ memberId: users.memberId })
       .from(users)
       .orderBy(users.createdAt)
-      .limit(1);
+      .limit(100); // Get last 100 to find highest sequence
     
     let sequence = 1;
-    if (lastMembers.length > 0 && lastMembers[0]) {
-      const memberIdValue = lastMembers[0].memberId;
-      if (typeof memberIdValue === 'string') {
+    const currentYearPrefix = `VIG-${year}-`;
+    
+    // Find the highest sequence number for the current year
+    for (const member of lastMembers) {
+      const memberIdValue = member.memberId;
+      if (typeof memberIdValue === 'string' && memberIdValue.startsWith(currentYearPrefix)) {
         const parts = (memberIdValue as string).split('-');
         if (parts.length === 3) {
-          const lastSeq = parseInt(parts[2]!, 10);
-          if (!isNaN(lastSeq)) {
-            sequence = lastSeq + 1;
+          const seq = parseInt(parts[2]!, 10);
+          if (!isNaN(seq) && seq >= sequence) {
+            sequence = seq + 1;
           }
         }
       }
@@ -202,13 +205,18 @@ export class AuthService {
         message: 'Registration successful. Awaiting approval.',
       });
     } catch (error: any) {
-      if (error.code === '23505') {
+      if (error.code === '23505' || error.message?.includes('duplicate key')) {
         // Unique constraint violation
-        if (error.constraint?.includes('employee_id')) {
+        if (error.constraint?.includes('employee_id') || error.message?.includes('employee_id')) {
           return err(AuthErrorCode.DUPLICATE_EMPLOYEE_ID);
         }
-        if (error.constraint?.includes('phone')) {
+        if (error.constraint?.includes('phone') || error.message?.includes('phone')) {
           return err(AuthErrorCode.DUPLICATE_PHONE);
+        }
+        if (error.constraint?.includes('member_id') || error.message?.includes('member_id')) {
+          // Member ID collision (very rare, but possible)
+          // This shouldn't happen in normal operation, but we handle it gracefully
+          return err(AuthErrorCode.DUPLICATE_EMPLOYEE_ID); // Treat as system error
         }
       }
       throw error;

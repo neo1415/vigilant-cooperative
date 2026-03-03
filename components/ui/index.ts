@@ -4,3 +4,4 @@ export { Card, CardHeader, CardTitle, CardContent, type CardProps } from './card
 export { Badge, type BadgeProps } from './badge';
 export { Modal, type ModalProps } from './modal';
 export { Select, type SelectProps } from './select';
+export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './table';

@@ -141,7 +141,16 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (!data.success) {
-        setError(data.error.message);
+        // Handle specific error codes
+        let errorMessage = data.error.message;
+        
+        if (data.error.code === 'DUPLICATE_EMPLOYEE_ID') {
+          errorMessage = 'This Employee ID is already registered. Please contact your administrator if you believe this is an error.';
+        } else if (data.error.code === 'DUPLICATE_PHONE') {
+          errorMessage = 'This phone number is already registered. Please use a different phone number or contact support.';
+        }
+        
+        setError(errorMessage);
         setLoading(false);
         return;
       }

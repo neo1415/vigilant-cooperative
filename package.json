@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "next dev",
     "dev:backend": "tsx watch server/index.ts",
-    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev\"",
+    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "next build",
     "start": "next start",
     "start:backend": "tsx server/index.ts",
@@ -18,7 +19,9 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx server/db/seed.ts",
-    "db:setup": "npm run db:generate && npm run db:migrate && npm run db:seed"
+    "db:setup": "npm run db:generate && npm run db:migrate && npm run db:seed",
+    "delete-user": "tsx scripts/delete-users.ts",
+    "delete-all-users": "tsx scripts/delete-users.ts all"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -55,6 +58,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "babel-plugin-react-compiler": "1.0.0",
+    "concurrently": "^9.2.1",
     "dotenv": "^16.4.7",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",

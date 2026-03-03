@@ -27,12 +27,12 @@ import bcrypt from 'bcryptjs';
  * Get encryption key from environment
  */
 function getEncryptionKey(): Buffer {
-  const key = process.env.FIELD_ENCRYPTION_KEY;
+  const key = process.env.ENCRYPTION_KEY;
   if (!key) {
-    throw new Error('FIELD_ENCRYPTION_KEY environment variable not set');
+    throw new Error('ENCRYPTION_KEY environment variable not set');
   }
   if (key.length !== 64) {
-    throw new Error('FIELD_ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
+    throw new Error('ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
   }
   return Buffer.from(key, 'hex');
 }
@@ -90,7 +90,7 @@ function getBcryptRounds(): number {
  * Format: [IV (16 bytes)][Auth Tag (16 bytes)][Encrypted Data]
  * 
  * @param plaintext - Data to encrypt
- * @returns Encrypted data as Buffer
+ * @returns Encrypted data as hex string
  * 
  * @example
  * ```ts
@@ -98,7 +98,7 @@ function getBcryptRounds(): number {
  * const decrypted = decrypt(encrypted); // 'sensitive data'
  * ```
  */
-export function encrypt(plaintext: string): Buffer {
+export function encrypt(plaintext: string): string {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(16); // Unique IV for each encryption
   
@@ -112,28 +112,34 @@ export function encrypt(plaintext: string): Buffer {
   const authTag = cipher.getAuthTag();
   
   // Combine: IV + Auth Tag + Encrypted Data
-  return Buffer.concat([iv, authTag, encrypted]);
+  const combined = Buffer.concat([iv, authTag, encrypted]);
+  
+  // Return as hex string for TEXT storage
+  return combined.toString('hex');
 }
 
 /**
  * Decrypt data encrypted with AES-256-GCM
  * 
- * @param ciphertext - Encrypted data as Buffer
+ * @param ciphertext - Encrypted data as hex string
  * @returns Decrypted plaintext
  * 
  * @throws {Error} If decryption fails (wrong key, tampered data, etc.)
  */
-export function decrypt(ciphertext: Buffer): string {
+export function decrypt(ciphertext: string): string {
   const key = getEncryptionKey();
   
-  if (ciphertext.length < 32) {
+  // Convert hex string to Buffer
+  const buffer = Buffer.from(ciphertext, 'hex');
+  
+  if (buffer.length < 32) {
     throw new Error('Invalid ciphertext: too short');
   }
   
   // Extract components
-  const iv = ciphertext.subarray(0, 16);
-  const authTag = ciphertext.subarray(16, 32);
-  const encrypted = ciphertext.subarray(32);
+  const iv = buffer.subarray(0, 16);
+  const authTag = buffer.subarray(16, 32);
+  const encrypted = buffer.subarray(32);
   
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(authTag);

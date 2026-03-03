@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
@@ -11,7 +12,11 @@ import { createRedisClient } from './redis/client';
 import { initializeQueues } from './queues/queues';
 import { registerQueueRoutes } from './routes/admin/queues';
 import { authRoutes } from './routes/auth';
+import { memberRoutes } from './routes/members';
+import { savingsRoutes } from './routes/savings';
+import { loanRoutes } from './routes/loans';
 import { createAuthenticationMiddleware } from './middleware/authentication';
+import { createIdempotencyMiddleware } from './middleware/idempotency';
 
 const fastify = Fastify({
   logger: {
@@ -80,10 +85,16 @@ async function start() {
     // Register decorators
     fastify.decorate('redis', redis);
     fastify.decorate('authenticate', createAuthenticationMiddleware(env.JWT_SECRET, redis));
+    fastify.decorate('requireIdempotency', createIdempotencyMiddleware(redis));
 
     // Health check endpoints
     fastify.get('/health', async () => {
       return { status: 'ok', timestamp: new Date().toISOString() };
+    });
+
+    // Test endpoint
+    fastify.get('/test', async () => {
+      return { message: 'Test endpoint works!' };
     });
 
     fastify.get('/health/ready', async () => {
@@ -119,7 +130,16 @@ async function start() {
     await registerQueueRoutes(fastify, queues);
 
     // Register authentication routes
-    await fastify.register(authRoutes);
+    await authRoutes(fastify, {});
+
+    // Register member routes
+    await memberRoutes(fastify);
+
+    // Register savings routes
+    await savingsRoutes(fastify);
+
+    // Register loan routes
+    await fastify.register(loanRoutes, { prefix: '/api/v1/loans' });
 
     // Graceful shutdown
     const signals = ['SIGINT', 'SIGTERM'];

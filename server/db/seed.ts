@@ -3,6 +3,7 @@
  * Seeds initial data: chart of accounts, config settings, and admin user
  */
 
+import 'dotenv/config';
 import { db } from './init';
 import { chartOfAccounts, configSettings, users, savingsAccounts } from './schema';
 import { sql } from 'drizzle-orm';
@@ -133,7 +134,7 @@ async function seedAdminUser() {
   
   const adminPassword = process.env.ADMIN_PASSWORD || 'Admin123!';
   const pepper = process.env.BCRYPT_PEPPER || 'default_pepper_change_in_production';
-  const encryptionKey = process.env.FIELD_ENCRYPTION_KEY || 'default_key_change_in_production';
+  const encryptionKey = process.env.ENCRYPTION_KEY || 'default_key_change_in_production';
   const hashSalt = process.env.HASH_SALT || 'default_salt_change_in_production';
   
   // Hash password with pepper (using utility function)
