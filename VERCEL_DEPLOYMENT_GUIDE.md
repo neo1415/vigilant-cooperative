@@ -1,148 +1,184 @@
 # Vercel Deployment Guide
 
-## The Problem
+## Architecture
 
-Your app has two parts:
-1. **Frontend** (Next.js) - Deployed to Vercel ✅
-2. **Backend** (Fastify) - NOT deployed ❌
+This is a monolithic Next.js application with a hybrid backend approach:
 
-In development, both run locally:
-- Frontend: `localhost:3000`
-- Backend: `localhost:3001`
+### Development Mode
+- Fastify backend runs on port 3001
+- Next.js frontend runs on port 3000
+- Next.js proxies `/api/v1/*` requests to Fastify via `next.config.ts` rewrites
 
-But Vercel only deploys the Next.js frontend. When you try to login in production, the frontend tries to call `/api/v1/auth/login`, which Next.js rewrites to your backend URL. Since there's no backend deployed, you get a 404 error.
+### Production Mode (Vercel)
+- Next.js API routes handle backend requests directly
+- No Fastify server (serverless environment)
+- Database and Redis connections initialized per-request
 
-## The Solution
+## Current Status
 
-You need to deploy your Fastify backend separately and configure Vercel to point to it.
+### ✅ Implemented Next.js API Routes
 
-### Option 1: Deploy Backend to Railway (Recommended - Free Tier Available)
+#### Auth Routes
+- `/api/v1/auth/login` - User authentication
+- `/api/v1/auth/register` - User registration
+- `/api/v1/auth/logout` - User logout
+- `/api/v1/auth/forgot-password` - Request password reset
+- `/api/v1/auth/reset-password` - Reset password with OTP
 
-1. **Create a Railway account**: https://railway.app/
+#### Member Routes
+- `/api/v1/members/me` - Get/update user profile
 
-2. **Create a new project** and select "Deploy from GitHub repo"
+#### Notification Routes
+- `/api/v1/notifications` - Get user notifications
+- `/api/v1/notifications/[id]/read` - Mark notification as read
+- `/api/v1/notifications/read-all` - Mark all notifications as read
 
-3. **Configure the backend**:
-   - Root Directory: `vigilant-cooperative`
-   - Build Command: `npm install`
-   - Start Command: `npm run start:backend`
-   
-4. **Add environment variables** in Railway:
-   ```
-   DATABASE_URL=your_postgres_url
-   REDIS_URL=your_redis_url
-   JWT_SECRET=your_jwt_secret_min_64_chars
-   NODE_ENV=production
-   PORT=3001
-   ```
+#### Savings Routes
+- `/api/v1/savings/accounts` - Get savings accounts
+- `/api/v1/savings/transactions` - Get transaction history
 
-5. **Get your Railway backend URL** (e.g., `https://your-app.up.railway.app`)
+#### Loan Routes
+- `/api/v1/loans` - Get user loans
 
-6. **Configure Vercel**:
-   - Go to your Vercel project settings
-   - Add environment variable:
-     ```
-     BACKEND_URL=https://your-app.up.railway.app
-     ```
-   - Redeploy
+### ⚠️ Still Using Fastify (Development Only)
+All other routes in `server/routes/` are only available in development mode. You'll need to create Next.js API routes for any endpoints you use in production.
 
-### Option 2: Deploy Backend to Render (Free Tier Available)
+## Creating New API Routes
 
-1. **Create a Render account**: https://render.com/
+When you encounter a missing endpoint in production, create a Next.js API route:
 
-2. **Create a new Web Service**
+1. Create file: `app/api/v1/[endpoint]/route.ts`
+2. Copy logic from corresponding Fastify route in `server/routes/`
+3. Replace Fastify-specific code:
+   - `fastify.authenticate` → Manual JWT verification with `verifyAccessToken()`
+   - `request.user` → Extract from decoded JWT
+   - `reply.send()` → `NextResponse.json()`
+   - `fastify.log` → `console.log/error`
 
-3. **Configure**:
-   - Build Command: `cd vigilant-cooperative && npm install`
-   - Start Command: `cd vigilant-cooperative && npm run start:backend`
+### Example Template
 
-4. **Add environment variables** (same as Railway)
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/server/db/init';
+import { successResponse, errorResponse, ErrorCode } from '@/utils/api-response';
+import { verifyAccessToken } from '@/utils/jwt';
+import { randomUUID } from 'crypto';
 
-5. **Get your Render URL** and add to Vercel as `BACKEND_URL`
+export async function GET(request: NextRequest) {
+  const requestId = randomUUID();
+  
+  try {
+    // Authenticate
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        errorResponse(ErrorCode.UNAUTHORIZED, 'Missing authorization', requestId),
+        { status: 401 }
+      );
+    }
 
-### Option 3: Use Vercel for Everything (Requires Rewrite)
+    const token = authHeader.substring(7);
+    const decoded = await verifyAccessToken(token);
+    const userId = decoded.userId;
 
-Convert your Fastify backend to Next.js API routes. This is more work but keeps everything in one place.
-
-**Pros**:
-- Single deployment
-- No separate backend to manage
-
-**Cons**:
-- Requires rewriting all backend routes
-- Vercel serverless functions have limitations (10s timeout, no WebSockets, etc.)
-- Redis/PostgreSQL need external hosting anyway
-
-## Quick Fix for Testing
-
-If you just want to test the frontend without backend functionality:
-
-1. Comment out the API calls in your frontend
-2. Use mock data
-3. Deploy to Vercel
-
-But for a real deployment, you need Option 1 or 2.
-
-## Recommended Architecture
-
-```
-┌─────────────────┐
-│   Vercel        │
-│   (Frontend)    │
-│   Next.js       │
-└────────┬────────┘
-         │
-         │ BACKEND_URL
-         │
-┌────────▼────────┐
-│   Railway       │
-│   (Backend)     │
-│   Fastify       │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-┌───▼──┐  ┌──▼───┐
-│ Neon │  │Redis │
-│  DB  │  │Cloud │
-└──────┘  └──────┘
+    // Your logic here
+    
+    return NextResponse.json(successResponse({ data: 'result' }, requestId));
+  } catch (error) {
+    console.error('Error:', error);
+    return NextResponse.json(
+      errorResponse(ErrorCode.INTERNAL_ERROR, 'Operation failed', requestId),
+      { status: 500 }
+    );
+  }
+}
 ```
 
-## Environment Variables Needed
+## Deployment Checklist
 
-### Vercel (Frontend)
-```
-BACKEND_URL=https://your-backend.railway.app
-NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
-```
+Before deploying to Vercel:
 
-### Railway/Render (Backend)
-```
-DATABASE_URL=postgresql://...
-REDIS_URL=redis://...
-JWT_SECRET=your_secret_min_64_characters
-NODE_ENV=production
-PORT=3001
-FRONTEND_URL=https://your-app.vercel.app
-```
+1. ✅ Remove `api/index.ts` (serverless function approach)
+2. ✅ Remove `vercel.json` (not needed for Next.js API routes)
+3. ✅ Create Next.js API routes for all production endpoints
+4. ✅ Set environment variables in Vercel dashboard
+5. ✅ Test authentication flow
+6. ✅ Verify database connections work in serverless environment
 
-## Testing the Deployment
+## Environment Variables
 
-1. Deploy backend to Railway/Render
-2. Test backend directly: `curl https://your-backend.railway.app/health`
-3. Add `BACKEND_URL` to Vercel
-4. Redeploy Vercel
-5. Test login on your Vercel URL
+Ensure these are set in Vercel:
 
-## Cost Estimate
+- `DATABASE_URL` - PostgreSQL connection string
+- `REDIS_URL` - Redis connection string  
+- `JWT_SECRET` - JWT signing secret (64+ characters)
+- All other variables from `.env.example`
 
-- **Vercel**: Free (Hobby plan)
-- **Railway**: Free tier (500 hours/month)
-- **Neon (PostgreSQL)**: Free tier (0.5GB storage)
-- **Redis Cloud**: Free tier (30MB)
+## Known Issues
 
-**Total**: $0/month for development/testing
+### 508 Loop Detected (FIXED)
+- **Cause**: `next.config.ts` rewrite creating infinite loop in production
+- **Fix**: Rewrites only active in development mode
 
-## Need Help?
+### 500 Internal Server Error (FIXED)
+- **Cause**: Fastify serverless function failing due to missing initialization
+- **Fix**: Use Next.js API routes instead of Fastify serverless function
 
-If you want me to help you set this up, let me know which option you prefer (Railway or Render) and I can guide you through it step by step.
+## Next Steps
+
+As you use the application in production, you'll encounter missing endpoints. For each one:
+
+1. Check the browser console/network tab for the failing endpoint
+2. Find the corresponding Fastify route in `server/routes/`
+3. Create a Next.js API route following the template above
+4. Deploy and test
+
+## Migration Progress
+
+Track which Fastify routes have been migrated to Next.js API routes:
+
+### Auth Routes (`server/routes/auth.ts`)
+- [x] POST `/api/v1/auth/login`
+- [x] POST `/api/v1/auth/register`
+- [ ] POST `/api/v1/auth/refresh`
+- [x] POST `/api/v1/auth/logout`
+- [x] POST `/api/v1/auth/forgot-password`
+- [x] POST `/api/v1/auth/reset-password`
+
+### Notification Routes (`server/routes/notifications.ts`)
+- [x] GET `/api/v1/notifications`
+- [x] PATCH `/api/v1/notifications/:id/read`
+- [x] PATCH `/api/v1/notifications/read-all`
+
+### Savings Routes (`server/routes/savings.ts`)
+- [x] GET `/api/v1/savings/accounts`
+- [x] GET `/api/v1/savings/transactions`
+- [ ] POST `/api/v1/savings/withdraw`
+- [ ] POST `/api/v1/savings/deposit`
+- [ ] POST `/api/v1/savings/credit`
+
+### Member Routes (`server/routes/members.ts`)
+- [x] GET `/api/v1/members/me`
+- [x] PATCH `/api/v1/members/me`
+- [ ] GET `/api/v1/members/:id`
+- [ ] PATCH `/api/v1/members/:id`
+- [ ] PATCH `/api/v1/members/:id/approve`
+- [ ] GET `/api/v1/members/pending`
+
+### Loan Routes (`server/routes/loans.ts`)
+- [x] GET `/api/v1/loans`
+- [ ] GET `/api/v1/loans/eligibility`
+- [ ] POST `/api/v1/loans/apply`
+- [ ] GET `/api/v1/loans/:id`
+- [ ] PATCH `/api/v1/loans/:id/approve`
+- [ ] PATCH `/api/v1/loans/:id/disburse`
+- [ ] POST `/api/v1/loans/:id/repay`
+
+### Ledger Routes (`server/routes/ledger.ts`)
+- [ ] All endpoints need migration
+
+### Payroll Routes (`server/routes/payroll.ts`)
+- [ ] All endpoints need migration
+
+### Admin Routes
+- [ ] All endpoints need migration

@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   async rewrites() {
     // In development, proxy to local Fastify server
-    // In production, Vercel will handle /api routes via vercel.json
+    // In production, use Next.js API routes
     if (process.env.NODE_ENV === 'development') {
       return [
         {
