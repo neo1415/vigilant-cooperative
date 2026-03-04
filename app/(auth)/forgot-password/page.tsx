@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
       setTimeout(() => {
         router.push(`/reset-password?identifier=${encodeURIComponent(identifier)}`);
       }, 2000);
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.');
       setLoading(false);
     }

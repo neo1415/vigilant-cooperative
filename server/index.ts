@@ -15,6 +15,8 @@ import { authRoutes } from './routes/auth';
 import { memberRoutes } from './routes/members';
 import { savingsRoutes } from './routes/savings';
 import { loanRoutes } from './routes/loans';
+import { notificationRoutes } from './routes/notifications';
+import { payrollRoutes } from './routes/payroll';
 import { createAuthenticationMiddleware } from './middleware/authentication';
 import { createIdempotencyMiddleware } from './middleware/idempotency';
 
@@ -140,6 +142,12 @@ async function start() {
 
     // Register loan routes
     await fastify.register(loanRoutes, { prefix: '/api/v1/loans' });
+
+    // Register notification routes
+    await fastify.register(notificationRoutes);
+
+    // Register payroll routes
+    await fastify.register(payrollRoutes);
 
     // Graceful shutdown
     const signals = ['SIGINT', 'SIGTERM'];

@@ -12,6 +12,18 @@ import { z } from 'zod';
 import { LoanService, LoanErrorCode, LoanListItem } from '../../services/loan.service';
 import { toKoboAmount } from '../../types/branded';
 import { formatNaira } from '../../utils/financial';
+import type { AuthenticatedUser } from '../middleware/authentication';
+
+// Extend Fastify types to include authenticated user
+declare module 'fastify' {
+  interface FastifyRequest {
+    user: AuthenticatedUser;
+  }
+  interface FastifyInstance {
+    authenticate: (request: any, reply: any) => Promise<void>;
+    requireIdempotency: (request: any, reply: any) => Promise<void>;
+  }
+}
 
 // ============================================================================
 // Request Schemas
@@ -45,6 +57,13 @@ const ERROR_MESSAGES: Record<LoanErrorCode, string> = {
   [LoanErrorCode.SELF_GUARANTEE_NOT_ALLOWED]: 'You cannot guarantee your own loan.',
   [LoanErrorCode.GUARANTOR_NOT_ELIGIBLE]: 'One or more guarantors are not eligible. Guarantors must be active, approved members with sufficient savings.',
   [LoanErrorCode.GUARANTOR_EXPOSURE_EXCEEDED]: 'One or more guarantors have exceeded their guarantee exposure limit.',
+  [LoanErrorCode.LOAN_NOT_FOUND]: 'Loan not found.',
+  [LoanErrorCode.INVALID_LOAN_STATUS]: 'Invalid loan status for this operation.',
+  [LoanErrorCode.UNAUTHORIZED]: 'You are not authorized to perform this action.',
+  [LoanErrorCode.INSUFFICIENT_COMMITTEE_APPROVALS]: 'Insufficient committee approvals for this loan.',
+  [LoanErrorCode.REJECTION_REASON_REQUIRED]: 'A rejection reason is required.',
+  [LoanErrorCode.GUARANTOR_ALREADY_RESPONDED]: 'You have already responded to this guarantor request.',
+  [LoanErrorCode.NOT_APPLICANT]: 'You are not the applicant for this loan.',
   [LoanErrorCode.CONFIG_NOT_FOUND]: 'System configuration error. Please contact support.',
   [LoanErrorCode.DATABASE_ERROR]: 'A database error occurred. Please try again later.',
   [LoanErrorCode.INVALID_INPUT]: 'Invalid input data.',
@@ -202,7 +221,7 @@ export async function loanRoutes(fastify: FastifyInstance) {
           error: {
             code: 'INVALID_INPUT',
             message: 'Invalid input data',
-            details: validation.error.errors,
+            details: validation.error.issues,
           },
         });
       }
@@ -217,7 +236,7 @@ export async function loanRoutes(fastify: FastifyInstance) {
         principalKobo: toKoboAmount(principalKobo),
         repaymentMonths,
         purpose,
-        purposeDetail: purposeDetail ?? undefined,
+        ...(purposeDetail ? { purposeDetail } : {}),
         guarantorIds,
       });
       
@@ -302,12 +321,12 @@ export async function loanRoutes(fastify: FastifyInstance) {
       const { status, loanType, startDate, endDate, search, page = 1, limit = 20 } = request.query;
       
       const result = await loanService.listLoans({
-        userId: isOfficer ? undefined : userId,
-        status: status ?? undefined,
-        loanType: loanType ?? undefined,
-        startDate: startDate ?? undefined,
-        endDate: endDate ?? undefined,
-        search: search ?? undefined,
+        ...(isOfficer ? {} : { userId }),
+        ...(status ? { status } : {}),
+        ...(loanType ? { loanType } : {}),
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {}),
+        ...(search ? { search } : {}),
         page,
         limit,
       });
@@ -469,5 +488,477 @@ export async function loanRoutes(fastify: FastifyInstance) {
       });
     }
   );
-}
+  
+  /**
+   * POST /api/v1/loans/:id/guarantors/:gid/consent
+   * 
+   * Guarantor provides consent for a loan.
+   * 
+   * Auth: MEMBER (must be the guarantor)
+   * Rate Limit: 10 requests/minute
+   */
+  fastify.post(
+    '/:id/guarantors/:gid/consent',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        description: 'Guarantor consent for loan',
+        tags: ['loans'],
+        params: {
+          type: 'object',
+          required: ['id', 'gid'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            gid: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['consent'],
+          properties: {
+            consent: { type: 'boolean' },
+            declineReason: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ 
+      Params: { id: string; gid: string };
+      Body: { consent: boolean; declineReason?: string };
+    }>, reply: FastifyReply) => {
+      const userId = request.user.id;
+      const { id: loanId, gid: guarantorId } = request.params;
+      const { consent, declineReason } = request.body;
+      
+      const result = await loanService.guarantorConsent(
+        loanId,
+        guarantorId,
+        consent,
+        declineReason
+      );
+      
+      if (!result.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: result.error,
+            message: ERROR_MESSAGES[result.error] || 'An error occurred',
+          },
+        });
+      }
+      
+      return reply.send({
+        success: true,
+        data: {
+          message: consent ? 'Consent provided successfully' : 'Loan declined',
+        },
+      });
+    }
+  );
+  
+  /**
+   * POST /api/v1/loans/:id/approve
+   * 
+   * Approve a loan (role-specific).
+   * - PRESIDENT: First approval
+   * - COMMITTEE: Second approval (requires 2 attestations)
+   * - TREASURER: Final approval and disbursement
+   * 
+   * Auth: PRESIDENT, COMMITTEE, TREASURER
+   * Rate Limit: 10 requests/minute
+   */
+  fastify.post(
+    '/:id/approve',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        description: 'Approve loan',
+        tags: ['loans'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            comments: { type: 'string' },
+            adjustedAmountKobo: { type: 'number' },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ 
+      Params: { id: string };
+      Body: { comments?: string; adjustedAmountKobo?: number };
+    }>, reply: FastifyReply) => {
+      const userId = request.user.id;
+      const userRoles = request.user.roles || [];
+      const { id: loanId } = request.params;
+      const { comments, adjustedAmountKobo } = request.body;
+      
+      let result;
+      
+      if (userRoles.includes('PRESIDENT')) {
+        result = await loanService.approveByPresident(
+          loanId,
+          userId,
+          true, // approved
+          comments,
+          undefined // no rejection reason for approval
+        );
+      } else if (userRoles.includes('COMMITTEE')) {
+        result = await loanService.approveByCommittee(
+          loanId,
+          userId,
+          true, // approved
+          comments
+        );
+      } else if (userRoles.includes('TREASURER')) {
+        result = await loanService.approveByTreasurer(
+          loanId,
+          userId,
+          true, // approved
+          comments
+        );
+      } else {
+        return reply.code(403).send({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to approve loans',
+          },
+        });
+      }
+      
+      if (!result.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: result.error,
+            message: ERROR_MESSAGES[result.error] || 'An error occurred',
+          },
+        });
+      }
+      
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Loan approved successfully',
+        },
+      });
+    }
+  );
+  
+  /**
+   * POST /api/v1/loans/:id/reject
+   * 
+   * Reject a loan application.
+   * 
+   * Auth: PRESIDENT, COMMITTEE, TREASURER
+   * Rate Limit: 10 requests/minute
+   */
+  fastify.post(
+    '/:id/reject',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        description: 'Reject loan',
+        tags: ['loans'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['reason'],
+          properties: {
+            reason: { type: 'string', minLength: 10 },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ 
+      Params: { id: string };
+      Body: { reason: string };
+    }>, reply: FastifyReply) => {
+      const userId = request.user.id;
+      const userRoles = request.user.roles || [];
+      const { id: loanId } = request.params;
+      const { reason } = request.body;
+      
+      const isOfficer = userRoles.some((role: string) => 
+        ['PRESIDENT', 'COMMITTEE', 'TREASURER'].includes(role)
+      );
+      
+      if (!isOfficer) {
+        return reply.code(403).send({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to reject loans',
+          },
+        });
+      }
+      
+      // Determine approver role
+      let approverRole: 'PRESIDENT' | 'COMMITTEE' | 'TREASURER';
+      if (userRoles.includes('PRESIDENT')) {
+        approverRole = 'PRESIDENT';
+      } else if (userRoles.includes('COMMITTEE')) {
+        approverRole = 'COMMITTEE';
+      } else {
+        approverRole = 'TREASURER';
+      }
+      
+      const result = await loanService.rejectLoan(loanId, userId, approverRole, reason);
+      
+      if (!result.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: result.error,
+            message: ERROR_MESSAGES[result.error] || 'An error occurred',
+          },
+        });
+      }
+      
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Loan rejected successfully',
+        },
+      });
+    }
+  );
+  
+  /**
+   * POST /api/v1/loans/:id/cancel
+   * 
+   * Cancel a loan application (applicant only).
+   * 
+   * Auth: MEMBER (must be applicant)
+   * Rate Limit: 10 requests/minute
+   */
+  fastify.post(
+    '/:id/cancel',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        description: 'Cancel loan application',
+        tags: ['loans'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const userId = request.user.id;
+      const { id: loanId } = request.params;
+      
+      const result = await loanService.cancelApplication(loanId, userId);
+      
+      if (!result.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: result.error,
+            message: ERROR_MESSAGES[result.error] || 'An error occurred',
+          },
+        });
+      }
+      
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Loan application cancelled successfully',
+        },
+      });
+    }
+  );
 
+  /**
+   * POST /api/v1/loans/:id/disburse
+   * 
+   * Disburse an approved loan (Treasurer only).
+   * Transfers funds via Monnify API and updates loan status.
+   * 
+   * Auth: TREASURER only
+   * Idempotency: Required
+   * Rate Limit: 5 requests/minute
+   */
+  fastify.post(
+    '/:id/disburse',
+    {
+      preHandler: [fastify.authenticate, fastify.requireIdempotency],
+      schema: {
+        description: 'Disburse an approved loan',
+        tags: ['loans'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+          required: ['id'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  loanReference: { type: 'string' },
+                  status: { type: 'string' },
+                  transferReference: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      // Check if user is TREASURER
+      if (!request.user.roles.includes('TREASURER')) {
+        return reply.code(403).send({
+          success: false,
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Only treasurers can disburse loans',
+          },
+        });
+      }
+
+      const result = await loanService.disburseLoan(
+        request.params.id,
+        request.user.id
+      );
+
+      if (!result.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: result.error,
+            message: ERROR_MESSAGES[result.error] || 'An error occurred',
+          },
+        });
+      }
+
+      return reply.send({
+        success: true,
+        data: result.value,
+      });
+    }
+  );
+
+  /**
+   * POST /api/v1/loans/:id/repayments
+   * 
+   * Record a loan repayment.
+   * Updates outstanding balance and marks loan as completed if fully repaid.
+   * 
+   * Auth: TREASURER or SECRETARY
+   * Idempotency: Required
+   * Rate Limit: 10 requests/minute
+   */
+  fastify.post(
+    '/:id/repayments',
+    {
+      preHandler: [fastify.authenticate, fastify.requireIdempotency],
+      schema: {
+        description: 'Record a loan repayment',
+        tags: ['loans'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+          required: ['id'],
+        },
+        body: {
+          type: 'object',
+          properties: {
+            amountKobo: { type: 'number' },
+            paymentDate: { type: 'string', format: 'date' },
+            paymentReference: { type: 'string' },
+            paymentMethod: { type: 'string', enum: ['PAYROLL_DEDUCTION', 'MANUAL', 'BANK_TRANSFER'] },
+          },
+          required: ['amountKobo', 'paymentDate', 'paymentReference', 'paymentMethod'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  outstandingKobo: { type: 'number' },
+                  status: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          amountKobo: number;
+          paymentDate: string;
+          paymentReference: string;
+          paymentMethod: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      // Check if user is TREASURER or SECRETARY
+      if (!request.user.roles.includes('TREASURER') && !request.user.roles.includes('SECRETARY')) {
+        return reply.code(403).send({
+          success: false,
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Only treasurers and secretaries can record repayments',
+          },
+        });
+      }
+
+      const result = await loanService.recordRepayment(
+        request.params.id,
+        toKoboAmount(request.body.amountKobo),
+        new Date(request.body.paymentDate),
+        request.body.paymentReference,
+        request.body.paymentMethod,
+        request.user.id
+      );
+
+      if (!result.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: result.error,
+            message: ERROR_MESSAGES[result.error] || 'An error occurred',
+          },
+        });
+      }
+
+      return reply.send({
+        success: true,
+        data: result.value,
+      });
+    }
+  );
+}

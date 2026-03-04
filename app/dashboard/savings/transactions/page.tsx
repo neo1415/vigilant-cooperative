@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { formatNaira } from '@/utils/financial';
 import { toKoboAmount } from '@/types/branded';
+import { apiClient } from '@/lib/api-client';
 
 interface Transaction {
   id: string;
@@ -63,11 +64,7 @@ export default function TransactionHistoryPage() {
       if (filters.startDate) params.append('startDate', new Date(filters.startDate).toISOString());
       if (filters.endDate) params.append('endDate', new Date(filters.endDate).toISOString());
 
-      const response = await fetch(`/api/v1/savings/transactions?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-      });
+      const response = await apiClient(`/api/v1/savings/transactions?${params}`);
 
       if (response.ok) {
         const data = await response.json();

@@ -10,7 +10,7 @@ import { Card } from '../../../../components/ui/card';
 import { Button } from '../../../../components/ui/button';
 import { formatNaira } from '../../../../utils/financial';
 import { toKoboAmount } from '../../../../types/branded';
-import { z } from 'zod';
+import { get, apiClient } from '@/lib/api-client';
 
 interface EligibilityData {
   eligible: boolean;
@@ -96,13 +96,10 @@ export default function LoanApplicationPage() {
 
   const fetchEligibility = async () => {
     try {
-      const res = await fetch('/api/v1/loans/eligibility', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setEligibility(data.data);
+      const result = await get<EligibilityData>('/api/v1/loans/eligibility');
+      if (result.success && result.data) {
+        setEligibility(result.data);
       }
-    } catch (err) {
-      setError('Failed to load eligibility');
     } finally {
       setLoading(false);
     }
@@ -110,12 +107,11 @@ export default function LoanApplicationPage() {
 
   const fetchMembers = async () => {
     try {
-      const res = await fetch('/api/v1/members/eligible-guarantors', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setMembers(data.data.members || []);
+      const result = await get<{ members: Member[] }>('/api/v1/members/eligible-guarantors');
+      if (result.success && result.data) {
+        setMembers(result.data.members || []);
       }
-    } catch (err) {
+    } catch {
       console.error('Failed to fetch members');
     }
   };
@@ -124,13 +120,11 @@ export default function LoanApplicationPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/loans', {
+      const res = await apiClient('/api/v1/loans', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        credentials: 'include',
         body: JSON.stringify({
           loanType: formData.loanType,
           principalKobo: formData.principalKobo,

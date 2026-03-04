@@ -73,7 +73,9 @@ export async function memberRoutes(fastify: FastifyInstance) {
             profileResult.error.code as ErrorCode,
             profileResult.error.message,
             request.id,
-            profileResult.error.details
+            typeof profileResult.error.details === 'string' 
+              ? { message: profileResult.error.details }
+              : profileResult.error.details
           )
         );
       }
@@ -115,7 +117,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
       return reply.send(
         successResponse(
           {
-            profile: profileResult.data,
+            profile: profileResult.value,
             savingsAccounts: savingsAccountsData,
             activeLoans,
           },
@@ -146,7 +148,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
             ErrorCode.VALIDATION_ERROR,
             'Validation failed',
             request.id,
-            validation.error.errors
+            { issues: validation.error.issues }
           )
         );
       }
@@ -164,9 +166,13 @@ export async function memberRoutes(fastify: FastifyInstance) {
       }
 
       // Update profile
+      const { email, department } = validation.data;
       const result = await updateMemberProfile(
         user.id,
-        validation.data,
+        {
+          ...(email ? { email } : {}),
+          ...(department ? { department } : {}),
+        },
         version,
         user.id
       );
@@ -178,12 +184,14 @@ export async function memberRoutes(fastify: FastifyInstance) {
             result.error.code as ErrorCode,
             result.error.message,
             request.id,
-            result.error.details
+            typeof result.error.details === 'string' 
+              ? { message: result.error.details }
+              : result.error.details
           )
         );
       }
 
-      return reply.send(successResponse(result.data, request.id));
+      return reply.send(successResponse(result.value, request.id));
     }
   );
 
@@ -220,7 +228,9 @@ export async function memberRoutes(fastify: FastifyInstance) {
             profileResult.error.code as ErrorCode,
             profileResult.error.message,
             request.id,
-            profileResult.error.details
+            typeof profileResult.error.details === 'string' 
+              ? { message: profileResult.error.details }
+              : profileResult.error.details
           )
         );
       }
@@ -254,7 +264,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
       return reply.send(
         successResponse(
           {
-            profile: profileResult.data,
+            profile: profileResult.value,
             savingsAccounts: savingsAccountsData,
             loans: loansData,
           },
@@ -286,7 +296,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
             ErrorCode.VALIDATION_ERROR,
             'Validation failed',
             request.id,
-            validation.error.errors
+            { issues: validation.error.issues }
           )
         );
       }
@@ -304,9 +314,14 @@ export async function memberRoutes(fastify: FastifyInstance) {
       }
 
       // Update profile
+      const { email, department, employmentStatus } = validation.data;
       const result = await updateMemberProfile(
         id,
-        validation.data,
+        {
+          ...(email ? { email } : {}),
+          ...(department ? { department } : {}),
+          ...(employmentStatus ? { employmentStatus } : {}),
+        },
         version,
         user.id
       );
@@ -318,12 +333,14 @@ export async function memberRoutes(fastify: FastifyInstance) {
             result.error.code as ErrorCode,
             result.error.message,
             request.id,
-            result.error.details
+            typeof result.error.details === 'string' 
+              ? { message: result.error.details }
+              : result.error.details
           )
         );
       }
 
-      return reply.send(successResponse(result.data, request.id));
+      return reply.send(successResponse(result.value, request.id));
     }
   );
 
@@ -353,12 +370,14 @@ export async function memberRoutes(fastify: FastifyInstance) {
             result.error.code as ErrorCode,
             result.error.message,
             request.id,
-            result.error.details
+            typeof result.error.details === 'string' 
+              ? { message: result.error.details }
+              : result.error.details
           )
         );
       }
 
-      return reply.send(successResponse(result.data, request.id));
+      return reply.send(successResponse(result.value, request.id));
     }
   );
 
@@ -385,12 +404,14 @@ export async function memberRoutes(fastify: FastifyInstance) {
             result.error.code as ErrorCode,
             result.error.message,
             request.id,
-            result.error.details
+            typeof result.error.details === 'string' 
+              ? { message: result.error.details }
+              : result.error.details
           )
         );
       }
 
-      return reply.send(successResponse(result.data, request.id));
+      return reply.send(successResponse(result.value, request.id));
     }
   );
 
@@ -437,10 +458,10 @@ export async function memberRoutes(fastify: FastifyInstance) {
       } catch (error) {
         return reply.code(500).send(
           errorResponse(
-            ErrorCode.DATABASE_ERROR,
+            ErrorCode.INTERNAL_ERROR,
             'Failed to fetch eligible guarantors',
             request.id,
-            error instanceof Error ? error.message : 'Unknown error'
+            { error: error instanceof Error ? error.message : 'Unknown error' }
           )
         );
       }

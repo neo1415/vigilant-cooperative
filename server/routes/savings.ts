@@ -468,7 +468,7 @@ export async function savingsRoutes(fastify: FastifyInstance) {
             previousValue: { balanceKobo: lockedAccount.balanceKobo },
             newValue: { balanceKobo: newBalance },
             ipAddress: request.ip,
-            userAgent: request.headers['user-agent'],
+            userAgent: request.headers['user-agent'] || null,
           });
 
           return {
@@ -489,10 +489,12 @@ export async function savingsRoutes(fastify: FastifyInstance) {
             request.id
           )
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         fastify.log.error({ error, userId: user.id }, 'Withdrawal failed');
 
-        if (error.message === 'WITHDRAWAL_LIMIT_EXCEEDED') {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        if (errorMessage === 'WITHDRAWAL_LIMIT_EXCEEDED') {
           return reply.code(400).send(
             errorResponse(
               ErrorCode.WITHDRAWAL_LIMIT_EXCEEDED,
@@ -502,7 +504,7 @@ export async function savingsRoutes(fastify: FastifyInstance) {
           );
         }
 
-        if (error.message === 'INSUFFICIENT_BALANCE') {
+        if (errorMessage === 'INSUFFICIENT_BALANCE') {
           return reply.code(400).send(
             errorResponse(
               ErrorCode.INSUFFICIENT_BALANCE,
@@ -512,7 +514,7 @@ export async function savingsRoutes(fastify: FastifyInstance) {
           );
         }
 
-        if (error.message === 'OPTIMISTIC_LOCK_CONFLICT') {
+        if (errorMessage === 'OPTIMISTIC_LOCK_CONFLICT') {
           return reply.code(409).send(
             errorResponse(
               ErrorCode.OPTIMISTIC_LOCK_CONFLICT,
@@ -709,7 +711,7 @@ export async function savingsRoutes(fastify: FastifyInstance) {
             previousValue: { balanceKobo: lockedAccount.balanceKobo },
             newValue: { balanceKobo: newBalance },
             ipAddress: request.ip,
-            userAgent: request.headers['user-agent'],
+            userAgent: request.headers['user-agent'] || null,
           });
 
           return {
@@ -730,10 +732,12 @@ export async function savingsRoutes(fastify: FastifyInstance) {
             request.id
           )
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         fastify.log.error({ error, userId: user.id }, 'Deposit failed');
 
-        if (error.message === 'OPTIMISTIC_LOCK_CONFLICT') {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        if (errorMessage === 'OPTIMISTIC_LOCK_CONFLICT') {
           return reply.code(409).send(
             errorResponse(
               ErrorCode.OPTIMISTIC_LOCK_CONFLICT,
@@ -961,7 +965,7 @@ export async function savingsRoutes(fastify: FastifyInstance) {
               reason,
             },
             ipAddress: request.ip,
-            userAgent: request.headers['user-agent'],
+            userAgent: request.headers['user-agent'] || null,
           });
 
           return {
@@ -987,10 +991,12 @@ export async function savingsRoutes(fastify: FastifyInstance) {
             request.id
           )
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         fastify.log.error({ error, userId: user.id, targetUserId }, 'Manual credit failed');
 
-        if (error.message === 'OPTIMISTIC_LOCK_CONFLICT') {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        if (errorMessage === 'OPTIMISTIC_LOCK_CONFLICT') {
           return reply.code(409).send(
             errorResponse(
               ErrorCode.OPTIMISTIC_LOCK_CONFLICT,

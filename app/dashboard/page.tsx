@@ -20,7 +20,7 @@ interface FinancialSummary {
 interface Transaction {
   id: string;
   type: string;
-  amount: number;
+  amountKobo: string;
   direction: 'CREDIT' | 'DEBIT';
   createdAt: string;
   description: string;
@@ -41,18 +41,18 @@ export default function DashboardPage() {
 
         // Fetch savings accounts
         const savingsResponse = await get('/api/v1/savings/accounts');
-        const savings = savingsResponse.data || [];
+        const savings = savingsResponse.data?.accounts || [];
         
         const normalAccount = savings.find((acc: any) => acc.accountType === 'NORMAL');
         const specialAccount = savings.find((acc: any) => acc.accountType === 'SPECIAL');
         
-        const normalSavings = normalAccount?.balanceKobo || 0;
-        const specialSavings = specialAccount?.balanceKobo || 0;
+        const normalSavings = parseInt(normalAccount?.balanceKobo || '0', 10);
+        const specialSavings = parseInt(specialAccount?.balanceKobo || '0', 10);
         const totalSavings = normalSavings + specialSavings;
 
         // Fetch loans
         const loansResponse = await get('/api/v1/loans');
-        const loans = loansResponse.data || [];
+        const loans = loansResponse.data?.loans || [];
         const activeLoans = loans.filter((loan: any) => 
           ['SUBMITTED', 'APPROVED', 'DISBURSED'].includes(loan.status)
         );
@@ -79,7 +79,7 @@ export default function DashboardPage() {
 
         // Fetch recent transactions
         const transactionsResponse = await get('/api/v1/savings/transactions?limit=5');
-        setRecentTransactions(transactionsResponse.data || []);
+        setRecentTransactions(transactionsResponse.data?.transactions || []);
 
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -280,7 +280,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <p className={`font-mono font-semibold ${transaction.direction === 'CREDIT' ? 'text-green-500' : 'text-red-500'}`}>
-                  {transaction.direction === 'CREDIT' ? '+' : '-'}{formatNaira(transaction.amount)}
+                  {transaction.direction === 'CREDIT' ? '+' : '-'}{formatNaira(parseInt(transaction.amountKobo, 10))}
                 </p>
               </div>
             ))}

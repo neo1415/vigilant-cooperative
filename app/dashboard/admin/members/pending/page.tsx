@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { get, patch } from '@/lib/api-client';
 
 interface PendingMember {
   id: string;
@@ -39,19 +40,12 @@ export default function PendingMembersPage() {
   const fetchPendingMembers = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('accessToken');
+      const result = await get<PendingMember[]>('/api/v1/members/pending');
       
-      const response = await fetch('http://localhost:3001/api/v1/members/pending', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch pending members');
+      if (!result.success || !result.data) {
+        throw new Error(result.error?.message || 'Failed to fetch pending members');
       }
-
-      const result = await response.json();
+      
       setMembers(result.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -63,21 +57,10 @@ export default function PendingMembersPage() {
   const handleApprove = async (memberId: string) => {
     setActionLoading(true);
     try {
-      const token = localStorage.getItem('accessToken');
+      const result = await patch(`/api/v1/members/${memberId}/approve`);
       
-      const response = await fetch(
-        `http://localhost:3001/api/v1/members/${memberId}/approve`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to approve member');
+      if (!result.success) {
+        throw new Error(result.error?.message || 'Failed to approve member');
       }
 
       await fetchPendingMembers();
@@ -92,15 +75,8 @@ export default function PendingMembersPage() {
   const handleBulkApprove = async () => {
     setActionLoading(true);
     try {
-      const token = localStorage.getItem('accessToken');
-      
       const promises = Array.from(selectedMembers).map((memberId) =>
-        fetch(`http://localhost:3001/api/v1/members/${memberId}/approve`, {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
+        patch(`/api/v1/members/${memberId}/approve`)
       );
 
       await Promise.all(promises);

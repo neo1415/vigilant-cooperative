@@ -48,6 +48,12 @@ async function deleteUserByMemberId(memberId: string) {
     }
     
     const user = userResult[0];
+    if (!user) {
+      console.log(`❌ User with member ID ${memberId} not found.`);
+      await pool.end();
+      return;
+    }
+    
     const userId = user.id as string;
     
     console.log(`✅ Found user: ${user.fullName} (${memberId})`);
@@ -62,7 +68,7 @@ async function deleteUserByMemberId(memberId: string) {
       const userLoans = await trx
         .select({ id: loans.id })
         .from(loans)
-        .where(eq(loans.userId, userId));
+        .where(eq(loans.applicantId, userId));
       
       const loanIds = userLoans.map(l => l.id);
       
@@ -79,7 +85,7 @@ async function deleteUserByMemberId(memberId: string) {
       // Delete loans
       const deletedLoans = await trx
         .delete(loans)
-        .where(eq(loans.userId, userId))
+        .where(eq(loans.applicantId, userId))
         .returning({ id: loans.id });
       console.log(`   ✓ Deleted ${deletedLoans.length} loan(s)`);
       

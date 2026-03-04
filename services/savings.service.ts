@@ -334,8 +334,8 @@ export class SavingsService {
           processedAt: txn!.createdAt as Date,
         });
       }, { isolationLevel: 'serializable' });
-    } catch (error: any) {
-      if (error.code === '55P03') {
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '55P03') {
         // Lock not available
         return err(SavingsErrorCode.SERVICE_BUSY);
       }
@@ -475,8 +475,8 @@ export class SavingsService {
           processedAt: txn!.createdAt as Date,
         });
       }, { isolationLevel: 'serializable' });
-    } catch (error: any) {
-      if (error.code === '55P03') {
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '55P03') {
         // Lock not available
         return err(SavingsErrorCode.SERVICE_BUSY);
       }
@@ -600,8 +600,8 @@ export class SavingsService {
           processedAt: txn!.createdAt as Date,
         });
       }, { isolationLevel: 'serializable' });
-    } catch (error: any) {
-      if (error.code === '55P03') {
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '55P03') {
         // Lock not available
         return err(SavingsErrorCode.SERVICE_BUSY);
       }

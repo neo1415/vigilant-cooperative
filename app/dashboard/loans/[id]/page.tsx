@@ -15,11 +15,12 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { apiClient } from '@/lib/api-client';
 
 interface LoanDetails {
   id: string;
@@ -144,18 +145,12 @@ export default function LoanDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchLoanDetails();
-  }, [loanId]);
-
-  async function fetchLoanDetails() {
+  const fetchLoanDetails = useCallback(async () => {
     setLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/v1/loans/${loanId}`, {
-        credentials: 'include',
-      });
+      const response = await apiClient(`/api/v1/loans/${loanId}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -170,7 +165,11 @@ export default function LoanDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [loanId]);
+
+  useEffect(() => {
+    fetchLoanDetails();
+  }, [fetchLoanDetails]);
 
   function formatDate(dateString: string) {
     return new Date(dateString).toLocaleDateString('en-NG', {
@@ -396,7 +395,7 @@ export default function LoanDetailsPage() {
               </p>
             ) : (
               <div className="space-y-4">
-                {loan.approvals.map((approval, index) => (
+                {loan.approvals.map((approval) => (
                   <div
                     key={approval.id}
                     className="p-4 rounded-lg"

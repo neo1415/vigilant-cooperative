@@ -9,13 +9,14 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { apiClient } from '@/lib/api-client';
 
 interface Loan {
   id: string;
@@ -88,11 +89,7 @@ export default function LoanListPage() {
     search: '',
   });
 
-  useEffect(() => {
-    fetchLoans();
-  }, [pagination.page, pagination.limit]);
-
-  async function fetchLoans() {
+  const fetchLoans = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -106,9 +103,7 @@ export default function LoanListPage() {
       if (filters.endDate) params.append('endDate', new Date(filters.endDate).toISOString());
       if (filters.search) params.append('search', filters.search);
 
-      const response = await fetch(`/api/v1/loans?${params}`, {
-        credentials: 'include',
-      });
+      const response = await apiClient(`/api/v1/loans?${params}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -120,7 +115,11 @@ export default function LoanListPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [pagination.page, pagination.limit, filters.status, filters.loanType, filters.startDate, filters.endDate, filters.search]);
+
+  useEffect(() => {
+    fetchLoans();
+  }, [fetchLoans]);
 
   function handleFilterChange(key: string, value: string) {
     setFilters(prev => ({ ...prev, [key]: value }));

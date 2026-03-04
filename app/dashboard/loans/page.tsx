@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { Card } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { useRouter } from 'next/navigation';
+import { get } from '@/lib/api-client';
 
 interface EligibilityData {
   eligible: boolean;
@@ -50,16 +51,13 @@ export default function LoanEligibilityPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/v1/loans/eligibility', {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch eligibility');
+      const result = await get<EligibilityData>('/api/v1/loans/eligibility');
+      
+      if (!result.success || !result.data) {
+        throw new Error(result.error?.message || 'Failed to fetch eligibility');
       }
 
-      const data = await response.json();
-      setEligibility(data.data);
+      setEligibility(result.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {

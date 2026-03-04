@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { formatNaira } from '@/utils/financial';
 import { toKoboAmount } from '@/types/branded';
+import { get, apiClient } from '@/lib/api-client';
 
 interface SavingsAccount {
   id: string;
@@ -45,15 +46,9 @@ export default function SavingsPage() {
 
   async function fetchAccounts() {
     try {
-      const response = await fetch('/api/v1/savings/accounts', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAccounts(data.data.accounts);
+      const result = await get<{ accounts: SavingsAccount[] }>('/api/v1/savings/accounts');
+      if (result.success && result.data) {
+        setAccounts(result.data.accounts);
       }
     } catch (error) {
       console.error('Failed to fetch accounts:', error);
@@ -62,15 +57,9 @@ export default function SavingsPage() {
 
   async function fetchTransactions() {
     try {
-      const response = await fetch('/api/v1/savings/transactions?limit=10', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTransactions(data.data.transactions);
+      const result = await get<{ transactions: Transaction[] }>('/api/v1/savings/transactions?limit=10');
+      if (result.success && result.data) {
+        setTransactions(result.data.transactions);
       }
     } catch (error) {
       console.error('Failed to fetch transactions:', error);
@@ -375,11 +364,9 @@ function WithdrawalModal({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/v1/savings/withdraw', {
+      const response = await apiClient('/api/v1/savings/withdraw', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({
@@ -592,11 +579,9 @@ function DepositModal({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/v1/savings/deposit', {
+      const response = await apiClient('/api/v1/savings/deposit', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({

@@ -7,7 +7,7 @@ import { db } from '../server/db/init';
 import { users, auditLog } from '../server/db/schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import type { Result } from '../types/result';
-import { createHash } from 'crypto';
+import { ok, err } from '../types/result';
 
 /**
  * Member profile data structure
@@ -36,9 +36,30 @@ export interface UpdateProfileData {
 }
 
 /**
+ * Member error codes
+ */
+export type MemberErrorCode = 
+  | 'MEMBER_NOT_FOUND'
+  | 'DATABASE_ERROR'
+  | 'OPTIMISTIC_LOCK_CONFLICT'
+  | 'VALIDATION_ERROR'
+  | 'UPDATE_FAILED'
+  | 'SERVICE_BUSY'
+  | 'ALREADY_APPROVED';
+
+/**
+ * Member service error structure
+ */
+export interface MemberServiceError {
+  code: MemberErrorCode;
+  message: string;
+  details?: Record<string, unknown> | string;
+}
+
+/**
  * Get member profile by user ID
  */
-export async function getMemberProfile(userId: string): Promise<Result<MemberProfile>> {
+export async function getMemberProfile(userId: string): Promise<Result<MemberProfile, MemberServiceError>> {
   try {
     const [user] = await db
       .select({
@@ -60,28 +81,19 @@ export async function getMemberProfile(userId: string): Promise<Result<MemberPro
       .limit(1);
 
     if (!user) {
-      return {
-        success: false,
-        error: {
-          code: 'MEMBER_NOT_FOUND',
-          message: 'Member not found',
-        },
-      };
+      return err({
+        code: 'MEMBER_NOT_FOUND',
+        message: 'Member not found',
+      });
     }
 
-    return {
-      success: true,
-      data: user as MemberProfile,
-    };
+    return ok(user as MemberProfile);
   } catch (error) {
-    return {
-      success: false,
-      error: {
-        code: 'DATABASE_ERROR',
-        message: 'Failed to retrieve member profile',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-    };
+    return err({
+      code: 'DATABASE_ERROR',
+      message: 'Failed to retrieve member profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
 
@@ -93,7 +105,7 @@ export async function updateMemberProfile(
   data: UpdateProfileData,
   currentVersion: number,
   updatedBy: string
-): Promise<Result<MemberProfile>> {
+): Promise<Result<MemberProfile, MemberServiceError>> {
   try {
     // Start transaction
     return await db.transaction(async (trx) => {
@@ -102,31 +114,25 @@ export async function updateMemberProfile(
         .select()
         .from(users)
         .where(and(eq(users.id, userId), isNull(users.deletedAt)))
-        .for('update', { nowait: true });
+        .for('update', { noWait: true });
 
       if (!currentUser) {
-        return {
-          success: false,
-          error: {
-            code: 'MEMBER_NOT_FOUND',
-            message: 'Member not found',
-          },
-        };
+        return err({
+          code: 'MEMBER_NOT_FOUND',
+          message: 'Member not found',
+        });
       }
 
       // Check version for optimistic locking
       if (currentUser.version !== currentVersion) {
-        return {
-          success: false,
-          error: {
-            code: 'OPTIMISTIC_LOCK_CONFLICT',
-            message: 'Profile was modified by another request. Please refresh and try again.',
-            details: {
-              expectedVersion: currentVersion,
-              actualVersion: currentUser.version,
-            },
+        return err({
+          code: 'OPTIMISTIC_LOCK_CONFLICT',
+          message: 'Profile was modified by another request. Please refresh and try again.',
+          details: {
+            expectedVersion: currentVersion,
+            actualVersion: currentUser.version,
           },
-        };
+        });
       }
 
       // Update profile
@@ -154,13 +160,10 @@ export async function updateMemberProfile(
         });
 
       if (!updatedUser) {
-        return {
-          success: false,
-          error: {
-            code: 'UPDATE_FAILED',
-            message: 'Failed to update profile',
-          },
-        };
+        return err({
+          code: 'UPDATE_FAILED',
+          message: 'Failed to update profile',
+        });
       }
 
       // Create audit log entry
@@ -177,31 +180,22 @@ export async function updateMemberProfile(
         createdAt: new Date(),
       });
 
-      return {
-        success: true,
-        data: updatedUser as MemberProfile,
-      };
+      return ok(updatedUser as MemberProfile);
     });
-  } catch (error: any) {
-    if (error.code === '55P03') {
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === '55P03') {
       // Lock not available
-      return {
-        success: false,
-        error: {
-          code: 'SERVICE_BUSY',
-          message: 'Profile is being updated by another request. Please try again.',
-        },
-      };
+      return err({
+        code: 'SERVICE_BUSY',
+        message: 'Profile is being updated by another request. Please try again.',
+      });
     }
 
-    return {
-      success: false,
-      error: {
-        code: 'DATABASE_ERROR',
-        message: 'Failed to update member profile',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-    };
+    return err({
+      code: 'DATABASE_ERROR',
+      message: 'Failed to update member profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
 
@@ -211,7 +205,7 @@ export async function updateMemberProfile(
 export async function approveMember(
   memberId: string,
   approvedBy: string
-): Promise<Result<{ memberId: string; approvedAt: Date }>> {
+): Promise<Result<{ memberId: string; approvedAt: Date }, MemberServiceError>> {
   try {
     return await db.transaction(async (trx) => {
       // Get member with pessimistic lock
@@ -219,27 +213,21 @@ export async function approveMember(
         .select()
         .from(users)
         .where(and(eq(users.id, memberId), isNull(users.deletedAt)))
-        .for('update', { nowait: true });
+        .for('update', { noWait: true });
 
       if (!member) {
-        return {
-          success: false,
-          error: {
-            code: 'MEMBER_NOT_FOUND',
-            message: 'Member not found',
-          },
-        };
+        return err({
+          code: 'MEMBER_NOT_FOUND',
+          message: 'Member not found',
+        });
       }
 
       // Check if already approved
       if (member.isApproved) {
-        return {
-          success: false,
-          error: {
-            code: 'ALREADY_APPROVED',
-            message: 'Member is already approved',
-          },
-        };
+        return err({
+          code: 'ALREADY_APPROVED',
+          message: 'Member is already approved',
+        });
       }
 
       const approvedAt = new Date();
@@ -267,33 +255,24 @@ export async function approveMember(
         createdAt: approvedAt,
       });
 
-      return {
-        success: true,
-        data: {
-          memberId: member.memberId,
-          approvedAt,
-        },
-      };
+      return ok({
+        memberId: member.memberId,
+        approvedAt,
+      });
     });
-  } catch (error: any) {
-    if (error.code === '55P03') {
-      return {
-        success: false,
-        error: {
-          code: 'SERVICE_BUSY',
-          message: 'Member approval is being processed. Please try again.',
-        },
-      };
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === '55P03') {
+      return err({
+        code: 'SERVICE_BUSY',
+        message: 'Member approval is being processed. Please try again.',
+      });
     }
 
-    return {
-      success: false,
-      error: {
-        code: 'DATABASE_ERROR',
-        message: 'Failed to approve member',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-    };
+    return err({
+      code: 'DATABASE_ERROR',
+      message: 'Failed to approve member',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
 
@@ -310,7 +289,8 @@ export async function listPendingMembers(): Promise<
       department: string | null;
       dateJoined: Date;
       createdAt: Date;
-    }>
+    }>,
+    MemberServiceError
   >
 > {
   try {
@@ -328,18 +308,12 @@ export async function listPendingMembers(): Promise<
       .where(and(eq(users.isApproved, false), isNull(users.deletedAt)))
       .orderBy(desc(users.createdAt));
 
-    return {
-      success: true,
-      data: pendingMembers,
-    };
+    return ok(pendingMembers);
   } catch (error) {
-    return {
-      success: false,
-      error: {
-        code: 'DATABASE_ERROR',
-        message: 'Failed to retrieve pending members',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-    };
+    return err({
+      code: 'DATABASE_ERROR',
+      message: 'Failed to retrieve pending members',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }

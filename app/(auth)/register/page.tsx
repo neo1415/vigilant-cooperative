@@ -157,7 +157,7 @@ export default function RegisterPage() {
 
       setMemberId(data.data.memberId);
       setSuccess(true);
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.');
       setLoading(false);
     }

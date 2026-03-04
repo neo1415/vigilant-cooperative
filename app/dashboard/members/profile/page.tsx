@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { get, patch } from '@/lib/api-client';
 
 interface MemberProfile {
   id: string;
@@ -61,19 +62,12 @@ export default function MemberProfilePage() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('accessToken');
+      const result = await get<ProfileData>('/api/v1/members/me');
       
-      const response = await fetch('http://localhost:3001/api/v1/members/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile');
+      if (!result.success || !result.data) {
+        throw new Error(result.error?.message || 'Failed to fetch profile');
       }
 
-      const result = await response.json();
       setProfileData(result.data);
       setEditForm({
         email: result.data.profile.email || '',
@@ -92,23 +86,13 @@ export default function MemberProfilePage() {
     setEditError(null);
 
     try {
-      const token = localStorage.getItem('accessToken');
-      
-      const response = await fetch('http://localhost:3001/api/v1/members/me', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...editForm,
-          version: profileData?.profile ? 1 : 0, // Simplified version handling
-        }),
+      const result = await patch('/api/v1/members/me', {
+        ...editForm,
+        version: profileData?.profile ? 1 : 0, // Simplified version handling
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to update profile');
+      
+      if (!result.success) {
+        throw new Error(result.error?.message || 'Failed to update profile');
       }
 
       await fetchProfile();

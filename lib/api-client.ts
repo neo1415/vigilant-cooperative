@@ -63,7 +63,7 @@ export async function get<T = any>(url: string): Promise<ApiResponse<T>> {
 export async function post<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
   const response = await apiClient(url, {
     method: 'POST',
-    body: data ? JSON.stringify(data) : undefined,
+    body: data ? JSON.stringify(data) : null,
   });
   return response.json();
 }
@@ -77,7 +77,7 @@ export async function post<T = any>(url: string, data?: any): Promise<ApiRespons
 export async function put<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
   const response = await apiClient(url, {
     method: 'PUT',
-    body: data ? JSON.stringify(data) : undefined,
+    body: data ? JSON.stringify(data) : null,
   });
   return response.json();
 }
@@ -91,7 +91,7 @@ export async function put<T = any>(url: string, data?: any): Promise<ApiResponse
 export async function patch<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
   const response = await apiClient(url, {
     method: 'PATCH',
-    body: data ? JSON.stringify(data) : undefined,
+    body: data ? JSON.stringify(data) : null,
   });
   return response.json();
 }

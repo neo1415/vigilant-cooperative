@@ -15,7 +15,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 import { db } from '../server/db/init';
-import { users, savingsAccounts, loans, savingsTransactions, loanPayments } from '../server/db/schema';
+import { users, savingsAccounts, loans, transactions, loanRepayments } from '../server/db/schema';
 import { eq } from 'drizzle-orm';
 
 async function deleteUserByMemberId(memberId: string) {
@@ -34,6 +34,11 @@ async function deleteUserByMemberId(memberId: string) {
   }
   
   const user = userResult[0];
+  if (!user) {
+    console.log(`❌ User with member ID ${memberId} not found.`);
+    return;
+  }
+  
   const userId = user.id as string;
   
   console.log(`✅ Found user: ${user.fullName} (${memberId})`);
@@ -42,25 +47,25 @@ async function deleteUserByMemberId(memberId: string) {
   
   // Delete in transaction to maintain referential integrity
   await db.transaction(async (trx) => {
-    // Delete loan payments first (references loans)
+    // Delete loan repayments first (references loans)
     const deletedPayments = await trx
-      .delete(loanPayments)
-      .where(eq(loanPayments.userId, userId))
-      .returning({ id: loanPayments.id });
-    console.log(`🗑️  Deleted ${deletedPayments.length} loan payment(s)`);
+      .delete(loanRepayments)
+      .where(eq(loanRepayments.loanId, userId))
+      .returning({ id: loanRepayments.id });
+    console.log(`🗑️  Deleted ${deletedPayments.length} loan repayment(s)`);
     
     // Delete loans
     const deletedLoans = await trx
       .delete(loans)
-      .where(eq(loans.userId, userId))
+      .where(eq(loans.applicantId, userId))
       .returning({ id: loans.id });
     console.log(`🗑️  Deleted ${deletedLoans.length} loan(s)`);
     
     // Delete savings transactions
     const deletedTransactions = await trx
-      .delete(savingsTransactions)
-      .where(eq(savingsTransactions.userId, userId))
-      .returning({ id: savingsTransactions.id });
+      .delete(transactions)
+      .where(eq(transactions.userId, userId))
+      .returning({ id: transactions.id });
     console.log(`🗑️  Deleted ${deletedTransactions.length} savings transaction(s)`);
     
     // Delete savings accounts
@@ -95,16 +100,16 @@ async function deleteAllUsers() {
   
   // Delete all data in transaction
   await db.transaction(async (trx) => {
-    // Delete loan payments first
-    const deletedPayments = await trx.delete(loanPayments).returning({ id: loanPayments.id });
-    console.log(`🗑️  Deleted ${deletedPayments.length} loan payment(s)`);
+    // Delete loan repayments first
+    const deletedPayments = await trx.delete(loanRepayments).returning({ id: loanRepayments.id });
+    console.log(`🗑️  Deleted ${deletedPayments.length} loan repayment(s)`);
     
     // Delete loans
     const deletedLoans = await trx.delete(loans).returning({ id: loans.id });
     console.log(`🗑️  Deleted ${deletedLoans.length} loan(s)`);
     
     // Delete savings transactions
-    const deletedTransactions = await trx.delete(savingsTransactions).returning({ id: savingsTransactions.id });
+    const deletedTransactions = await trx.delete(transactions).returning({ id: transactions.id });
     console.log(`🗑️  Deleted ${deletedTransactions.length} savings transaction(s)`);
     
     // Delete savings accounts

@@ -22,7 +22,10 @@ export function isAuthenticated(): boolean {
   if (!token) return false;
   
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const parts = token.split('.');
+    if (parts.length !== 3 || !parts[1]) return false;
+    
+    const payload = JSON.parse(atob(parts[1]));
     // Check if token is expired (exp is in seconds, Date.now() is in milliseconds)
     return payload.exp * 1000 > Date.now();
   } catch {
@@ -48,7 +51,10 @@ export function getUserFromToken(): UserInfo | null {
   if (!token) return null;
   
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const parts = token.split('.');
+    if (parts.length !== 3 || !parts[1]) return null;
+    
+    const payload = JSON.parse(atob(parts[1]));
     return {
       id: payload.sub,
       memberId: payload.member_id,

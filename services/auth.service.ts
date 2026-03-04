@@ -204,19 +204,32 @@ export class AuthService {
         memberId: result.memberId,
         message: 'Registration successful. Awaiting approval.',
       });
-    } catch (error: any) {
-      if (error.code === '23505' || error.message?.includes('duplicate key')) {
+    } catch (error: unknown) {
+      // Type guard for database error with code and constraint
+      interface DatabaseError {
+        code?: string;
+        constraint?: string;
+        message?: string;
+      }
+      
+      const isDatabaseError = (err: unknown): err is DatabaseError => {
+        return err !== null && typeof err === 'object';
+      };
+      
+      if (isDatabaseError(error)) {
         // Unique constraint violation
-        if (error.constraint?.includes('employee_id') || error.message?.includes('employee_id')) {
-          return err(AuthErrorCode.DUPLICATE_EMPLOYEE_ID);
-        }
-        if (error.constraint?.includes('phone') || error.message?.includes('phone')) {
-          return err(AuthErrorCode.DUPLICATE_PHONE);
-        }
-        if (error.constraint?.includes('member_id') || error.message?.includes('member_id')) {
-          // Member ID collision (very rare, but possible)
-          // This shouldn't happen in normal operation, but we handle it gracefully
-          return err(AuthErrorCode.DUPLICATE_EMPLOYEE_ID); // Treat as system error
+        if (error.code === '23505' || (error.message && error.message.includes('duplicate key'))) {
+          if (error.constraint?.includes('employee_id') || error.message?.includes('employee_id')) {
+            return err(AuthErrorCode.DUPLICATE_EMPLOYEE_ID);
+          }
+          if (error.constraint?.includes('phone') || error.message?.includes('phone')) {
+            return err(AuthErrorCode.DUPLICATE_PHONE);
+          }
+          if (error.constraint?.includes('member_id') || error.message?.includes('member_id')) {
+            // Member ID collision (very rare, but possible)
+            // This shouldn't happen in normal operation, but we handle it gracefully
+            return err(AuthErrorCode.DUPLICATE_EMPLOYEE_ID); // Treat as system error
+          }
         }
       }
       throw error;
@@ -265,7 +278,9 @@ export class AuthService {
     if (!isValidPassword) {
       // Increment failed login count
       const newFailedCount = ((user.failedLoginCount as number) || 0) + 1;
-      const updates: any = { failedLoginCount: newFailedCount };
+      const updates: { failedLoginCount: number; lockedUntil?: Date } = { 
+        failedLoginCount: newFailedCount 
+      };
       
       // Lock account after 5 failed attempts
       if (newFailedCount >= 5) {
@@ -295,7 +310,7 @@ export class AuthService {
       }
       // Convert text back to Buffer (stored as base64 or hex in database)
       const totpSecretBuffer = Buffer.from(user.totpSecretEncrypted as string, 'base64');
-      const totpSecret = decrypt(totpSecretBuffer);
+      const totpSecret = decrypt(totpSecretBuffer.toString('base64'));
       const isValidTotp = verifyTotpCode(totpSecret, input.totpCode);
       
       if (!isValidTotp) {
