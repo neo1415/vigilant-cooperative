@@ -96,12 +96,12 @@ export async function notificationRoutes(fastify: FastifyInstance) {
             hasMore,
             page: pageNum,
             limit: limitNum,
-          })
+          }, request.id)
         );
       } catch (error) {
         fastify.log.error({ err: error }, 'Failed to fetch notifications');
         return reply.status(500).send(
-          errorResponse(ErrorCode.DATABASE_ERROR, 'Failed to fetch notifications')
+          errorResponse(ErrorCode.DATABASE_ERROR, 'Failed to fetch notifications', request.id)
         );
       }
     }
@@ -134,7 +134,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
 
         if (notification.length === 0) {
           return reply.status(404).send(
-            errorResponse(ErrorCode.NOT_FOUND, 'Notification not found')
+            errorResponse(ErrorCode.NOT_FOUND, 'Notification not found', request.id)
           );
         }
 
@@ -151,11 +151,11 @@ export async function notificationRoutes(fastify: FastifyInstance) {
           .set({ metadata: updatedMetadata })
           .where(eq(notifications.id, id));
 
-        return reply.send(successResponse({ message: 'Notification marked as read' }));
+        return reply.send(successResponse({ message: 'Notification marked as read' }, request.id));
       } catch (error) {
         fastify.log.error({ err: error }, 'Failed to mark notification as read');
         return reply.status(500).send(
-          errorResponse(ErrorCode.DATABASE_ERROR, 'Failed to update notification')
+          errorResponse(ErrorCode.DATABASE_ERROR, 'Failed to update notification', request.id)
         );
       }
     }
@@ -202,12 +202,12 @@ export async function notificationRoutes(fastify: FastifyInstance) {
           successResponse({
             message: 'All notifications marked as read',
             count: unreadNotifications.length,
-          })
+          }, request.id)
         );
       } catch (error) {
         fastify.log.error({ err: error }, 'Failed to mark all notifications as read');
         return reply.status(500).send(
-          errorResponse(ErrorCode.DATABASE_ERROR, 'Failed to update notifications')
+          errorResponse(ErrorCode.DATABASE_ERROR, 'Failed to update notifications', request.id)
         );
       }
     }
