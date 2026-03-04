@@ -89,6 +89,17 @@
   .font-mono {
     font-family: var(--font-mono);
   }
+
+  /* Interactive elements cursor */
+  a, button, [role="button"], [type="button"], [type="submit"], [type="reset"], 
+  input[type="checkbox"], input[type="radio"], select {
+    cursor: pointer;
+  }
+
+  a:disabled, button:disabled, [role="button"]:disabled, 
+  [type="button"]:disabled, [type="submit"]:disabled, [type="reset"]:disabled {
+    cursor: not-allowed;
+  }
 }
 
 @layer utilities {

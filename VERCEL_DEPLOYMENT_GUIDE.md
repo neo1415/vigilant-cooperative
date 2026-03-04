@@ -162,13 +162,14 @@ Track which Fastify routes have been migrated to Next.js API routes:
 - [x] PATCH `/api/v1/members/me`
 - [ ] GET `/api/v1/members/:id`
 - [ ] PATCH `/api/v1/members/:id`
-- [ ] PATCH `/api/v1/members/:id/approve`
-- [ ] GET `/api/v1/members/pending`
+- [x] PATCH `/api/v1/members/:id/approve`
+- [x] GET `/api/v1/members/pending`
+- [x] GET `/api/v1/members/eligible-guarantors`
 
 ### Loan Routes (`server/routes/loans.ts`)
 - [x] GET `/api/v1/loans`
-- [ ] GET `/api/v1/loans/eligibility`
-- [ ] POST `/api/v1/loans/apply`
+- [x] GET `/api/v1/loans/eligibility`
+- [x] POST `/api/v1/loans` (loan application)
 - [ ] GET `/api/v1/loans/:id`
 - [ ] PATCH `/api/v1/loans/:id/approve`
 - [ ] PATCH `/api/v1/loans/:id/disburse`

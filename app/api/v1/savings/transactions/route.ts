@@ -13,8 +13,8 @@ const transactionQuerySchema = z.object({
   page: z.string().optional().default('1').transform((val) => parseInt(val, 10)),
   limit: z.string().optional().default('25').transform((val) => parseInt(val, 10)),
   accountType: z.enum(['NORMAL', 'SPECIAL']).optional(),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
 });
 
 export async function GET(request: NextRequest) {
