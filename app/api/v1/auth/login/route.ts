@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import * as schema from '../../../../../server/db/schema';
 import { eq, or } from 'drizzle-orm';
-import { verifyPassword } from '../../../../../utils/encryption';
+import { verifyPassword, hashForLookup } from '../../../../../utils/encryption';
 import { generateAccessToken, generateRefreshToken, hashRefreshToken, getRefreshTokenTtlSeconds, getRefreshTokenKey } from '../../../../../utils/jwt';
 import { successResponse, errorResponse, ErrorCode, getHttpStatusCode } from '../../../../../utils/api-response';
 import { validateSchema, loginSchema } from '../../../../../utils/validation';
@@ -52,12 +52,15 @@ export async function POST(request: NextRequest) {
 
     const { identifier, password } = validation.data;
 
-    // Find user by member_id or phone
+    // Hash the identifier to search by phoneHash or use memberId directly
+    const phoneHash = hashForLookup(identifier);
+    
+    // Find user by member_id or phone hash
     const user = await db.query.users.findFirst({
       where: or(
         eq(schema.users.memberId, identifier),
-        eq(schema.users.phone, identifier)
-      ),
+        eq(schema.users.phoneHash, phoneHash)
+      )
     });
 
     if (!user) {
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if account is locked
-    if (user.accountLocked) {
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
       return NextResponse.json(
         errorResponse(
           ErrorCode.ACCOUNT_LOCKED,
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if member is approved
-    if (user.status !== 'APPROVED') {
+    if (!user.isApproved) {
       return NextResponse.json(
         errorResponse(
           ErrorCode.MEMBER_NOT_APPROVED,
@@ -130,10 +133,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update last login
+    // Update last login timestamp
     await db
       .update(schema.users)
-      .set({ lastLoginAt: new Date() })
+      .set({ updatedAt: new Date() })
       .where(eq(schema.users.id, user.id));
 
     return NextResponse.json(
